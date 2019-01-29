@@ -1,5 +1,15 @@
 import FWCore.ParameterSet.Config as cms
 
+from FWCore.ParameterSet.VarParsing import VarParsing
+options = VarParsing ('python')
+options.register('input',None,
+                 VarParsing.multiplicity.singleton,
+                 VarParsing.varType.string,
+                 "input file"
+                 )
+options.parseArguments()
+
+
 process = cms.Process("ANA")
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(-1)
@@ -7,9 +17,7 @@ process.maxEvents = cms.untracked.PSet(
 
 
 process.source = cms.Source ("PoolSource",    
-                             fileNames = cms.untracked.vstring(
-        'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/RECO_211Pt10VtxNoSmear.root'
-        ),
+                             fileNames = cms.untracked.vstring(options.input),
                              secondaryFileNames = cms.untracked.vstring(),
                              noEventSort = cms.untracked.bool(True),
                              duplicateCheckMode = cms.untracked.string('noDuplicateCheck')

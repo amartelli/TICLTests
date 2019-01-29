@@ -56,7 +56,7 @@ process.VtxSmeared = cms.EDProducer("FlatEvtVtxGenerator",
 
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(10)
+    input = cms.untracked.int32(options.maxEvents)
 )
 
 from IOMC.RandomEngine.RandomServiceHelper import RandomNumberServiceHelper

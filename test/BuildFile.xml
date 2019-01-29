@@ -1,9 +1,11 @@
-<library   name="TICLAnalyzer" file="TICLAnalyzer.cc">
-  <use   name="DataFormats/ParticleFlowReco"/>
+<library name="TICLAnalyzer" file="TICLAnalyzer.cc">
+  <use name="DataFormats/ParticleFlowReco"/>
+  <use name="DataFormats/Math"/>
+  <use name="DataFormats/HepMCCandidate"/>
   <use name="RecoHGCal/TICL"/>
-  <use   name="FWCore/Framework"/>
-  <use   name="FWCore/MessageLogger"/>
-  <use   name="FWCore/ParameterSet"/>
-  <use   name="FWCore/Utilities"/>
-  <flags   EDM_PLUGIN="1"/>
+  <use name="FWCore/Framework"/>
+  <use name="FWCore/MessageLogger"/>
+  <use name="FWCore/ParameterSet"/>
+  <use name="FWCore/Utilities"/>
+  <flags EDM_PLUGIN="1"/>
 </library>

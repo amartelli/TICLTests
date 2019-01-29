@@ -16,6 +16,8 @@
 #include "FWCore/Framework/interface/MakerMacros.h"
 #include "DataFormats/ParticleFlowReco/interface/HGCalMultiCluster.h"
 #include "RecoHGCal/TICL/interface/Trackster.h"
+#include "DataFormats/HepMCCandidate/interface/GenParticle.h"
+#include "DataFormats/HepMCCandidate/interface/GenParticleFwd.h"
 
 #include "TSystem.h"
 #include "TH1F.h"
@@ -37,6 +39,7 @@ class TICLAnalyzer : public edm::EDAnalyzer {
 
  private:
   
+  edm::EDGetTokenT<std::vector<reco::GenParticle> > genToken_;
   edm::EDGetTokenT<std::vector<reco::HGCalMultiCluster> > mcToken_;
 
   std::map<TString,TH1 *> histos_;

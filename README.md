@@ -21,5 +21,5 @@ cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT_VALIDATION_DQM.py
 Run 
 
 ```
-doTICLPlots /eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/RECO_211Pt10VtxNoSmear.root
+cmsRun test/analyzeTICL_cfg.py input=file:/eos/cms/store/cmst3/group/hgcal/Patatrack5/TwoParticlesInCone/PDG22/DeltaR0.1/Events_1.root
 ```
