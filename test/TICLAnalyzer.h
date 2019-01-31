@@ -6,6 +6,8 @@
 #include <string>
 #include <iostream>
 #include <map>
+#include <vector>
+#include <set>
 
 // user include files
 #include "FWCore/Framework/interface/Frameworkfwd.h"
@@ -23,6 +25,8 @@
 #include "DataFormats/HepMCCandidate/interface/GenParticle.h"
 #include "DataFormats/HepMCCandidate/interface/GenParticleFwd.h"
 #include "DataFormats/CaloRecHit/interface/CaloCluster.h"
+#include "DataFormats/HGCRecHit/interface/HGCRecHit.h"
+#include "DataFormats/HGCRecHit/interface/HGCRecHitCollections.h"
 
 #include "TSystem.h"
 #include "TH1F.h"
@@ -56,8 +60,12 @@ class TICLAnalyzer : public edm::EDAnalyzer {
 
   edm::EDGetTokenT<std::vector<CaloParticle> > genToken_;
   edm::EDGetTokenT<std::vector<SimCluster> > simclusToken_;
-  edm::EDGetTokenT<std::vector<reco::CaloCluster> > eetkToken_,fhtkToken_;
+  edm::EDGetTokenT<std::vector<reco::CaloCluster> > tkToken_;
   edm::EDGetTokenT<std::vector<reco::HGCalMultiCluster> > mcMIPToken_,mcToken_;
+
+  edm::EDGetTokenT<HGCRecHitCollection> hits_eeToken_;
+  edm::EDGetTokenT<HGCRecHitCollection> hits_fhToken_;
+  edm::EDGetTokenT<HGCRecHitCollection> hits_bhToken_;
 
   std::map<TString,TH1 *> histos_;
 
