@@ -97,17 +97,17 @@ void  TICLAnalyzer::analyze(const Event& iEvent,
   }
 }
 
-
+//
 std::vector<uint32_t> TICLAnalyzer::getClusteredHitsList(bool pos,
-                                                         const std::vector<std::pair<uint32_t,float> >  &hits,
+                                                         const std::vector<std::pair<uint32_t,float> > &hits,
                                                          const std::vector<reco::HGCalMultiCluster> &mcs) {
   
   std::vector<uint32_t> matchedList;
-
+  
   for(auto mc : mcs) {
-
+    
     //require on the same side
-    bool mcPos(mc.positionREP().Eta()>0);
+    bool mcPos(mc.eta()>0);
     if(mcPos!=pos) continue;
     
     //loop over all the layer clusters in the multicluster
@@ -116,6 +116,7 @@ std::vector<uint32_t> TICLAnalyzer::getClusteredHitsList(bool pos,
       std::vector<uint32_t> imatches=getMatched(hits,recHits);
       matchedList.insert(matchedList.end(), imatches.begin(), imatches.end());
     }
+    
   }
 
   return matchedList;
@@ -153,7 +154,7 @@ std::vector<uint32_t> TICLAnalyzer::getMatched(const std::vector<std::pair<uint3
 
     //find first match in second list
     for(size_t j=0; j<b.size(); j++) {
-      if(a[i].first!=b[i].first.rawId()) continue;
+      if(a[i].first!=b[j].first.rawId()) continue;
       matchedList.push_back(a[i].first);
       break;
     }
