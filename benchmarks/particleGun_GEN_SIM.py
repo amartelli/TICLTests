@@ -11,7 +11,7 @@ process = cms.Process('SIM',eras.Phase2C4)
 
 from FWCore.ParameterSet.VarParsing import VarParsing
 options = VarParsing ('python')
-options.register('deltaR', 0.2,
+options.register('deltaR', 5,
                  VarParsing.multiplicity.singleton,
                  VarParsing.varType.float,
                  "deltaR between two candidates"
@@ -99,28 +99,17 @@ process.genstepfilter.triggerConditions=cms.vstring("generation_step")
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase2_realistic', '')
 
-
-process.generator = cms.EDProducer("MultiParticleInConeGunProducer",
-                                   PGunParameters = cms.PSet(PartID = cms.vint32(options.pdgId),
-                                                             MaxPt = cms.double(35.01),
-                                                             MinPt = cms.double(34.99),
-                                                             MinEta = cms.double(1.6),
+process.generator = cms.EDProducer("CloseByParticleGunProducer",
+                                   PGunParameters = cms.PSet(PartID = cms.vint32(options.pdgId,options.pdgId),
+                                                             En = cms.double(50.),
+                                                             R = cms.double(options.deltaR),
+                                                             MinEta = cms.double(1.5), #dummy values
                                                              MaxEta = cms.double(2.9),
                                                              MinPhi = cms.double(-3.1415),
-                                                             MaxPhi = cms.double(3.1415),
-                                                             InConeID = cms.vint32(options.pdgId),
-                                                             MinDeltaR = cms.double(options.deltaR*0.99),
-                                                             MaxDeltaR = cms.double(options.deltaR*1.01),
-                                                             MinMomRatio = cms.double(1.),
-                                                             MaxMomRatio = cms.double(1.),
-                                                             InConeMinEta = cms.double(1.6),
-                                                             InConeMaxEta = cms.double(2.9),
-                                                             InConeMinPhi = cms.double(-3.1415),
-                                                             InConeMaxPhi = cms.double(3.1415),
-                                                             InConeMaxTry = cms.uint32(10)
+                                                             MaxPhi = cms.double(+3.1415)
                                                              ),
                                    Verbosity = cms.untracked.int32(0),
-                                   psethack = cms.string('single photon pt 35'),
+                                   psethack = cms.string('two close by particles'),
                                    AddAntiParticle = cms.bool(False),
                                    firstRun = cms.untracked.uint32(1)
                                    )

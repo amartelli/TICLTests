@@ -13,12 +13,15 @@ using namespace edm;
 using namespace reco;
 
 TICLAnalyzer::TICLAnalyzer(const edm::ParameterSet& iConfig) :
-  genToken_(consumes<std::vector<reco::GenParticle> >(edm::InputTag("genParticles"))),
-  mcToken_(consumes<std::vector<reco::HGCalMultiCluster> >(edm::InputTag("hgcalMultiClusters")))
+  genToken_(consumes<std::vector<CaloParticle> >(edm::InputTag("mix:MergedCaloTruth"))),
+  simclusToken_(consumes<std::vector<SimCluster> >(edm::InputTag("mix:MergedCaloTruth"))),
+  eetkToken_(consumes<std::vector<reco::CaloCluster> >(edm::InputTag("hgcTracks:EE"))),
+  fhtkToken_(consumes<std::vector<reco::CaloCluster> >(edm::InputTag("hgcTracks:FH"))),
+  mcMIPToken_(consumes<std::vector<reco::HGCalMultiCluster> >(edm::InputTag("TrackstersToMultiClusterMIP:MIPMultiClustersFromTracksterByCA"))),
+  mcToken_(consumes<std::vector<reco::HGCalMultiCluster> >(edm::InputTag("TrackstersToMultiCluster:MultiClustersFromTracksterByCA")))
 {
-  histos_["dr"]   = new TH1F("dr",   ";#Delta R;", 50,0,0.5);
-  histos_["nlc"]  = new TH1F("nlc",  ";Layer clusters/multicluster multiplicity;",  100,  0 , 100 );
-  histos_["resp"] = new TH1F("resp", ";E(multicluster)/E(gen);",  50,  0 , 2 );  
+  //book some histos here
+  //histos_["dr"]   = new TH1F("dr",   ";#Delta R;", 50,0,0.5);
 }
 
 
@@ -42,34 +45,125 @@ void TICLAnalyzer::beginRun(const edm::Run& run,
 void  TICLAnalyzer::analyze(const Event& iEvent, 
                             const EventSetup& iSetup) {
 
-  edm::Handle<std::vector<reco::GenParticle> > gpH;
+  edm::Handle<std::vector<CaloParticle> > gpH;
   iEvent.getByToken( genToken_, gpH);
 
-  edm::Handle<std::vector<reco::HGCalMultiCluster> > mcH;
+  edm::Handle<std::vector<SimCluster> > scH;
+  iEvent.getByToken( simclusToken_, scH);
+
+  edm::Handle<std::vector<reco::CaloCluster> > eetkH,fhtkH;
+  iEvent.getByToken( eetkToken_, eetkH);
+  iEvent.getByToken( fhtkToken_, fhtkH);
+
+  edm::Handle<std::vector<reco::HGCalMultiCluster> > mcMIPH,mcH;
+  iEvent.getByToken( mcMIPToken_,mcMIPH);
   iEvent.getByToken( mcToken_,mcH);
 
-  for(size_t i=0; i<gpH->size(); i++) {
-    const reco::GenParticle &g=gpH->at(i);
-
-    //closest multicluster
-    int bestMatchIdx(-1);
-    float minDR2(9999.);
-    for(size_t j=0; j<mcH->size(); j++) {
-      const reco::HGCalMultiCluster &m=mcH->at(j);
-
-      float dR2=deltaR2(g,m);
-      if(dR2>minDR2) continue;
-      minDR2=dR2;
-      bestMatchIdx=j;
-    }
-    if(bestMatchIdx<0) continue;
+  
+  for(auto cp : *gpH) {
     
-    //control dists
-    const reco::HGCalMultiCluster &m=mcH->at(bestMatchIdx);
-    histos_["nlc"]->Fill(m.size());
-    histos_["dr"]->Fill(sqrt(minDR2));
-    histos_["resp"]->Fill(m.energy()/g.energy());
+    float eta=cp.eta();
+
+    std::vector<std::pair<uint32_t,float> > allHits;
+    std::vector<uint32_t> allMatched_eetk, allMatched_fhtk;
+    std::vector<uint32_t> allMatched_mcMIP,allMatched_mc;
+
+    //iterate over all the attached sim clusters
+    for(CaloParticle::sc_iterator scIt=cp.simCluster_begin();
+        scIt!=cp.simCluster_end();
+        scIt++) {
+
+      //all hits and energy fractions at sim level
+      std::vector<std::pair<uint32_t,float> > hits=scH->at( scIt->key() ).hits_and_fractions();
+      allHits.insert(allHits.end(),hits.begin(),hits.end());
+
+      //check which ones are matched by HGC tracking
+      std::vector<uint32_t> matched_eetk = getTrackedHitsList(eta>0,hits,*eetkH);
+      allMatched_eetk.insert(allMatched_eetk.end(),matched_eetk.begin(),matched_eetk.end());
+      std::vector<uint32_t> matched_fhtk = getTrackedHitsList(eta>0,hits,*eetkH);
+      allMatched_fhtk.insert(allMatched_fhtk.end(),matched_fhtk.begin(),matched_fhtk.end());
+
+      //check which ones are matched by the multicluster algorithmb
+      std::vector<uint32_t> matched_mcMIP=getClusteredHitsList(eta>0,hits,*mcMIPH);
+      allMatched_mcMIP.insert(allMatched_mcMIP.end(),matched_mcMIP.begin(),matched_mcMIP.end());
+      std::vector<uint32_t> matched_mc=getClusteredHitsList(eta>0,hits,*mcH);
+      allMatched_mc.insert(allMatched_mc.end(),matched_mc.begin(),matched_mc.end());
+    }
+
+
+    std::cout << cp.pdgId() << " " << allHits.size() 
+              << " " << allMatched_eetk.size() << " " << allMatched_fhtk.size()
+              << " " << allMatched_mcMIP.size() << " " << allMatched_mc.size() << std::endl;
   }
 }
+
+
+std::vector<uint32_t> TICLAnalyzer::getClusteredHitsList(bool pos,
+                                                         const std::vector<std::pair<uint32_t,float> >  &hits,
+                                                         const std::vector<reco::HGCalMultiCluster> &mcs) {
+  
+  std::vector<uint32_t> matchedList;
+
+  for(auto mc : mcs) {
+
+    //require on the same side
+    bool mcPos(mc.positionREP().Eta()>0);
+    if(mcPos!=pos) continue;
+    
+    //loop over all the layer clusters in the multicluster
+    for(reco::HGCalMultiCluster::component_iterator it = mc.begin(); it!=mc.end(); it++){
+      const std::vector< std::pair<DetId, float> > &recHits = (*it)->hitsAndFractions();
+      std::vector<uint32_t> imatches=getMatched(hits,recHits);
+      matchedList.insert(matchedList.end(), imatches.begin(), imatches.end());
+    }
+  }
+
+  return matchedList;
+}
+
+
+//
+std::vector<uint32_t> TICLAnalyzer::getTrackedHitsList(bool pos,
+                                                       const std::vector<std::pair<uint32_t,float> >  &hits,
+                                                       const std::vector<reco::CaloCluster> &ccs) {
+  
+  std::vector<uint32_t> matchedList;
+  
+  for(auto cc : ccs) {
+    
+    //require on the same side
+    bool ccPos(cc.eta()>0);
+    if(ccPos!=pos) continue;
+    
+    const std::vector< std::pair<DetId, float> > &recHits =cc.hitsAndFractions();
+    std::vector<uint32_t> imatches=getMatched(hits,recHits);
+    matchedList.insert(matchedList.end(), imatches.begin(), imatches.end());
+    
+  }
+  
+  return matchedList;  
+}
+
+//
+std::vector<uint32_t> TICLAnalyzer::getMatched(const std::vector<std::pair<uint32_t,float> > &a,
+                                               const std::vector<std::pair<DetId,float> > &b){
+
+  std::vector<uint32_t> matchedList;
+  for(size_t i=0; i<a.size(); i++) {
+
+    //find first match in second list
+    for(size_t j=0; j<b.size(); j++) {
+      if(a[i].first!=b[i].first.rawId()) continue;
+      matchedList.push_back(a[i].first);
+      break;
+    }
+  }
+
+  return matchedList;
+}
+
+
+
+
 
 DEFINE_FWK_MODULE(TICLAnalyzer);
