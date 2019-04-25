@@ -19,11 +19,18 @@ process.maxEvents = cms.untracked.PSet(
 
 process.source = cms.Source("PoolSource",
                             fileNames = cms.untracked.vstring(
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_Pt10_vtxHLLHC_LowEta.root',
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_Pt10_vtxHLLHC_HighEta.root'
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_211_Pt10.root'
-        'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_130_Pt10.root'
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211Pt10_HighEta_PU200_4.root'
+        'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/muchLooserTune/stepTICL_211_Pt10_HighEta.root',
+        'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/muchLooserTune/stepTICL_211_Pt10_LowEta.root'
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/looserTune/stepTICL_211_HighEta_Pt10.root',
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/looserTune/stepTICL_211_LowEta_Pt10.root'
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211Pt10_HighEta.root', 
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211Pt10_LowEta.root'   
+
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/looserTune/stepTICL_211_211_Pt10.root',
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/looserTune/stepTICL_211_130_Pt10.root'
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_211_Pt10.root',
+        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/looserTune/stepTICL_211_130_Pt10.root'
+
         ),
                             secondaryFileNames = cms.untracked.vstring(),
                              noEventSort = cms.untracked.bool(True),
@@ -42,6 +49,12 @@ process.source = cms.Source("PoolSource",
 
 
 process.ticlAnalyzer = cms.EDAnalyzer("BuildParticles")
+
+
+process.TFileService = cms.Service("TFileService",
+                                   fileName = cms.string("file:ticl_analysis_BuildP_211_test.root")
+                                   )
+
 
 process.p = cms.Path(process.ticlAnalyzer)
 
