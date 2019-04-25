@@ -1,4 +1,4 @@
-#include "RecoHGCal/TICLTests/test/TICLAnalyzer.h"
+#include "RecoHGCal/TICLTests/plugins/TICLAnalyzer.h"
 
 #include "FWCore/Framework/interface/ESHandle.h"
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
