@@ -1,15 +1,17 @@
-<library name="TICLAnalyzer" file="TICLAnalyzer.cc">
-<library name="BuildParticles" file="BuildParticles.cc">
-  <use name="DataFormats/ParticleFlowReco"/>
-  <use name="DataFormats/Math"/>
-  <use name="DataFormats/CaloRecHit"/>
-  <use name="DataFormats/HepMCCandidate"/>
-  <use name="SimDataFormats/CaloAnalysis"/>
-  <use name="RecoHGCal/TICL"/>
-  <use name="FWCore/Framework"/>
-  <use name="FWCore/MessageLogger"/>
-  <use name="FWCore/ParameterSet"/>
-  <use name="FWCore/Utilities"/>
-  <use name="RecoLocalCalo/HGCalRecAlgos"/>
-  <flags EDM_PLUGIN="1"/>
+<use name="DataFormats/ParticleFlowReco"/>
+<use name="PhysicsTools/UtilAlgos"/>
+<use name="FWCore/ServiceRegistry"/>
+<use name="DataFormats/Math"/>
+<use name="DataFormats/CaloRecHit"/>
+<use name="DataFormats/HepMCCandidate"/>
+<use name="SimDataFormats/CaloAnalysis"/>
+<use name="RecoHGCal/TICL"/>
+<use name="FWCore/Framework"/>
+<use name="FWCore/MessageLogger"/>
+<use name="FWCore/ParameterSet"/>
+<use name="FWCore/Utilities"/>
+<use name="RecoLocalCalo/HGCalRecAlgos"/>
+<library   file="*.cc" name="RecoHGCalTICLTestsPlugins">
+  <flags   EDM_PLUGIN="1"/>
 </library>
+
