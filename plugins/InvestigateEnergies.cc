@@ -65,16 +65,19 @@ using namespace std;
 using namespace edm;
 using namespace reco;
 
-class CheckResolution : public edm::EDAnalyzer {
+class InvestigateEnergies : public edm::EDAnalyzer {
 public:
 
-  explicit CheckResolution(const edm::ParameterSet&);
+  explicit InvestigateEnergies(const edm::ParameterSet&);
 
-  ~CheckResolution();
+  ~InvestigateEnergies();
 
   virtual void analyze(const edm::Event&, const edm::EventSetup&);
 
   virtual void beginRun(const edm::Run & r, const edm::EventSetup & c);
+
+  virtual void beginJob() override;
+  virtual void endJob() override;
 
 private:
 
@@ -96,6 +99,8 @@ private:
 
   void getTimeClusteredHitsList(bool pos, const std::vector<reco::HGCalMultiCluster> &mcs, std::vector<float> &times);
   void getTimeTrackedHitsList(bool pos, const std::vector<reco::CaloCluster> &ccs, std::vector<float> &times);
+  void get2DclAssociated(std::map<uint32_t, std::vector<uint32_t> >& mappa, std::map<uint32_t, std::vector<uint32_t> >& mappa_ni, 
+			 const std::vector<CaloParticle>& cP, const std::vector<reco::CaloCluster>& lC);
 
 
   std::set<uint32_t> getMatchedHitsList(bool pos,
@@ -134,12 +139,14 @@ private:
 
 
 
+
   edm::EDGetTokenT<std::vector<CaloParticle> > genToken_;
   edm::EDGetTokenT<float> tGenToken_;
 
   //  edm::EDGetTokenT<std::vector<reco::CaloCluster> > tkToken_;
   edm::EDGetTokenT<std::vector<reco::HGCalMultiCluster> > mcTrkToken_, mcMIPToken_,mcToken_;
 
+  edm::EDGetTokenT<std::vector<reco::CaloCluster> > caloClToken_;
   edm::EDGetTokenT<HGCRecHitCollection> hits_eeToken_;
   edm::EDGetTokenT<HGCRecHitCollection> hits_fhToken_;
   edm::EDGetTokenT<HGCRecHitCollection> hits_bhToken_;
@@ -148,6 +155,29 @@ private:
   edm::Handle<edm::ValueMap<pair<float, float> > > time2DMap;
 
   std::map<uint32_t, const HGCRecHit*> hitmap;
+ 
+  std::map<uint32_t, std::vector<uint32_t> > caloP_2dCl_map;
+  std::map<uint32_t, std::vector<uint32_t> > caloP_2dCl_map_ni;
+
+  TH2F* layerClenergy_vsCaloPpt;
+  TH2F* layerClenergy_vsCaloPenergy;
+  TH2F* layerClenergySum_vsCaloPenergy;
+  TH2F* layerClenergy_vslayerClenergySum;
+
+  TH2F* fr_layerClenergy_vsCaloPenergy;
+  TH2F* fr_layerClenergySum_vsCaloPenergy;
+  TH2F* fr_layerClenergy_vslayerClenergySum;
+
+  ///// nn interacting
+  TH2F* layerClenergy_vsCaloPenergy_ni;
+  TH2F* layerClenergySum_vsCaloPenergy_ni;
+  TH2F* layerClenergy_vslayerClenergySum_ni;
+
+
+  TH2F* dR_vs_layer;
+  TH2F* dEta_vs_layer;
+  TH2F* dPhi_vs_layer;
+
   
   TH1F* recoBP_genAll_RatioEnergy;
   TH1F* recoAll_genAll_RatioEnergy;
@@ -169,13 +199,14 @@ private:
 
 
 
-CheckResolution::CheckResolution(const edm::ParameterSet& iConfig) :
+InvestigateEnergies::InvestigateEnergies(const edm::ParameterSet& iConfig) :
   genToken_(consumes<std::vector<CaloParticle> >(edm::InputTag("mix:MergedCaloTruth"))),
   tGenToken_(consumes<float>(edm::InputTag("genParticles:t0"))),
   //tkToken_(consumes<std::vector<reco::CaloCluster> >(edm::InputTag("hgcTracks::RECO2"))),
   mcTrkToken_(consumes<std::vector<reco::HGCalMultiCluster> >(edm::InputTag("ticlMultiClustersFromTrackstersTrk::RECO"))),
   mcMIPToken_(consumes<std::vector<reco::HGCalMultiCluster> >(edm::InputTag("ticlMultiClustersFromTrackstersMIP::RECO"))),
   mcToken_(consumes<std::vector<reco::HGCalMultiCluster> >(edm::InputTag("ticlMultiClustersFromTrackstersMerge::RECO"))),
+  caloClToken_(consumes<std::vector<reco::CaloCluster> >(edm::InputTag("hgcalLayerClusters::RECO"))),
   hits_eeToken_(consumes<HGCRecHitCollection>(edm::InputTag("HGCalRecHit","HGCEERecHits"))),
   hits_fhToken_(consumes<HGCRecHitCollection>(edm::InputTag("HGCalRecHit","HGCHEFRecHits"))),
   hits_bhToken_(consumes<HGCRecHitCollection>(edm::InputTag("HGCalRecHit","HGCHEBRecHits"))),
@@ -185,6 +216,24 @@ CheckResolution::CheckResolution(const edm::ParameterSet& iConfig) :
 
   edm::Service<TFileService> fs;
 
+  layerClenergy_vsCaloPpt = fs->make<TH2F>("layerClenergy_vsCaloPpt", "", 5000, 0., 20., 500, 0., 10.);
+  layerClenergy_vsCaloPenergy = fs->make<TH2F>("layerClenergy_vsCaloPenergy", "", 5000, 0., 20., 500, 0., 10.);
+  layerClenergySum_vsCaloPenergy = fs->make<TH2F>("layerClenergySum_vsCaloPenergy", "", 5000, 0., 20., 500, 0., 10.);
+  layerClenergy_vslayerClenergySum = fs->make<TH2F>("layerClenergy_vslayerClenergySum", "", 5000, 0., 20., 500, 0., 10.);
+
+  fr_layerClenergy_vsCaloPenergy = fs->make<TH2F>("fr_layerClenergy_vsCaloPenergy", "", 5000, 0., 20., 50, 0., 1.);
+  fr_layerClenergySum_vsCaloPenergy = fs->make<TH2F>("fr_layerClenergySum_vsCaloPenergy", "", 5000, 0., 20., 50, 0., 1.);
+  fr_layerClenergy_vslayerClenergySum = fs->make<TH2F>("fr_layerClenergy_vslayerClenergySum", "", 5000, 0., 20., 50, 0., 1.);
+
+  ///non interactiong
+  layerClenergy_vsCaloPenergy_ni = fs->make<TH2F>("layerClenergy_vsCaloPenergy_ni", "", 5000, 0., 20., 500, 0., 10.);
+  layerClenergySum_vsCaloPenergy_ni = fs->make<TH2F>("layerClenergySum_vsCaloPenergy_ni", "", 5000, 0., 20., 500, 0., 10.);
+  layerClenergy_vslayerClenergySum_ni = fs->make<TH2F>("layerClenergy_vslayerClenergySum_ni", "", 5000, 0., 20., 500, 0., 10.);
+
+
+  dR_vs_layer = fs->make<TH2F>("dR_vs_layer", "", 100, -50., 50., 500, -10., 10.);
+  dEta_vs_layer = fs->make<TH2F>("dEta_vs_layer", "", 100, -50., 50., 500, -10., 10.);
+  dPhi_vs_layer = fs->make<TH2F>("dPhi_vs_layer", "", 100, -50., 50., 500, -10., 10.);
 
   recoBP_genAll_RatioEnergy = fs->make<TH1F>("recoBP_genAll_RatioEnergy", "", 5000, 0., 5.);
   recoAll_genAll_RatioEnergy = fs->make<TH1F>("recoAll_genAll_RatioEnergy", "", 5000, 0., 5.);
@@ -203,16 +252,16 @@ CheckResolution::CheckResolution(const edm::ParameterSet& iConfig) :
 
 
 
-CheckResolution::~CheckResolution() { 
+InvestigateEnergies::~InvestigateEnergies() { 
 }
 
 
 
-void CheckResolution::beginRun(const edm::Run& run, 
+void InvestigateEnergies::beginRun(const edm::Run& run, 
 			       const edm::EventSetup & es) { }
 
 
-void  CheckResolution::analyze(const Event& iEvent, 
+void  InvestigateEnergies::analyze(const Event& iEvent, 
 			       const EventSetup& iSetup) {
 
   ++nEvent;
@@ -234,23 +283,6 @@ void  CheckResolution::analyze(const Event& iEvent,
   iEvent.getByToken( mcMIPToken_,mcMIPH);
   iEvent.getByToken( mcToken_, mcH);
 
-  //first clean tracksters
-  std::vector<reco::HGCalMultiCluster> mcHClean = cleanTimeMC(*mcH);
-  std::vector<reco::HGCalMultiCluster> mcMIPHClean = cleanTimeMC(*mcMIPH);
-
-
-  //now select highest cluster for each side
-  std::vector<reco::HGCalMultiCluster> allTracksters;
-  std::vector<reco::HGCalMultiCluster> bestTrackster = getHighestEnergyMC(mcHClean, mcMIPHClean, allTracksters);
-
-  if(debug) std::cout << " qui ci sono bestTrackster.size() = " << bestTrackster.size() 
-		      << " allTracksters size = " << allTracksters.size() 
-		      << std::endl;
-  if(debug) std::cout << " mcH->size() = " << mcH->size() << " mcMIPH->size() = " << mcMIPH->size() << std::endl;
-  if(debug) std::cout << " mcHClean.size() = " << mcHClean.size() << " mcMIPHClean.size() = " << mcMIPHClean.size() << std::endl;
-
-
-
   edm::Handle<HGCRecHitCollection> ee_hits;
   edm::Handle<HGCRecHitCollection> fh_hits;
   edm::Handle<HGCRecHitCollection> bh_hits;
@@ -267,6 +299,121 @@ void  CheckResolution::analyze(const Event& iEvent,
   for(auto const& it: *fh_hits){
     hitmap[it.detid().rawId()] = &it;
   }
+
+  edm::Handle<std::vector<reco::CaloCluster>> cluster_h;
+  iEvent.getByToken(caloClToken_, cluster_h);
+  const auto &layerClusters = *cluster_h;
+
+  caloP_2dCl_map.clear();
+  caloP_2dCl_map_ni.clear();
+  //map caloParticle-2dCl with more than 90% energy
+  get2DclAssociated(caloP_2dCl_map, caloP_2dCl_map_ni, *gpH, layerClusters);
+  //  std::cout << " tornato size = " << caloP_2dCl_map.size()  << std::endl;
+
+  //  std::cout << " >>> now filling histo " << std::endl;
+
+  /*
+  for(auto ij:caloP_2dCl_map){
+    float CPenergy = (*gpH)[ij.first].energy();
+    if(CPenergy <= 0) std::cout << " >> CPenergy = " << CPenergy << " evento = " << nEvent << std::endl;
+    float sum2Denergy = 0.;
+    for(auto ijH:ij.second){
+      float layerCenergy = layerClusters[ijH].energy();
+      if(layerCenergy < 0) std::cout << " >> layerCenergy = " << layerCenergy << std::endl;
+      layerClenergy_vsCaloPenergy->Fill(CPenergy, layerCenergy);    
+      sum2Denergy += layerCenergy;
+    }
+    if(sum2Denergy != 0.) {
+      layerClenergySum_vsCaloPenergy->Fill(CPenergy, sum2Denergy);
+      for(auto ijH:ij.second){
+	float layerCenergy = layerClusters[ijH].energy();
+	layerClenergy_vslayerClenergySum->Fill(sum2Denergy, layerCenergy);    
+      }
+    }
+  }
+
+  std::cout << " nuovo evento " << std::endl;
+  */
+  /*
+  int firstBin = 0;
+  //  std::cout << " layerClenergy_vsCaloPenergy->GetNbinsX() = " << layerClenergy_vsCaloPenergy->GetNbinsX() << std::endl;
+  for(int iB = 1; iB < layerClenergy_vsCaloPenergy->GetNbinsX()+1; ++iB){
+    if(firstBin != 0 && iB > firstBin  + 5) break;
+    float xVal = (iB-1) * 0.004 + 0.002;
+    //    std::cout << " 2D binX = " << xVal << std::endl;
+    auto dummy = (TH1D*)layerClenergy_vsCaloPenergy->ProjectionY("dummy", iB, iB+1);
+    int allEvt = dummy->GetEntries();
+    float localEvt = 0.;
+
+    auto dummySumCP = (TH1D*)layerClenergySum_vsCaloPenergy->ProjectionY("dummySumCP", iB, iB+1);
+    int allEvtSumCP = dummySumCP->GetEntries();
+    float localEvtSumCP = 0.;
+
+    auto dummySum = (TH1D*)layerClenergy_vslayerClenergySum->ProjectionY("dummySum", iB, iB+1);
+    int allEvtSum = dummySum->GetEntries();
+    float localEvtSum = 0.;
+
+    if(allEvt == 0 || allEvtSumCP == 0 || allEvtSum == 0) continue;
+    if( firstBin==0) firstBin = iB;
+    for(int ij = 1; ij<dummy->GetNbinsX()+1; ++ij){
+      float yVal = (ij-1) * 0.02 + 0.01;
+      //      std::cout << " 2D binY = " << yVal << " dummy->GetNbinsX() = " << dummy->GetNbinsX() << " ij = " << ij << " " << (ij-1 * 0.02) + 0.01 << std::endl;
+      localEvt += dummy->GetBinContent(ij);
+      fr_layerClenergy_vsCaloPenergy->Fill(xVal, yVal/xVal, (allEvt - localEvt) / allEvt);
+      std::cout << " x = " << xVal << " y = " << yVal/xVal << " val = " << (allEvt - localEvt) / allEvt << std::endl;
+
+      localEvtSumCP += dummySumCP->GetBinContent(ij);
+      fr_layerClenergySum_vsCaloPenergy->Fill(xVal, yVal/xVal, (allEvtSumCP - localEvtSumCP) / allEvtSumCP);
+
+      localEvtSum += dummySum->GetBinContent(ij);
+      fr_layerClenergy_vslayerClenergySum->Fill(xVal, yVal/xVal, (allEvtSum - localEvtSum) / allEvtSum);
+    }
+    delete dummy;
+    delete dummySum;
+    delete dummySumCP;
+
+  }
+  */
+
+  /*
+  // non interacting
+  for(auto ij:caloP_2dCl_map_ni){
+    float CPenergy = (*gpH)[ij.first].energy();
+    if(CPenergy < 0) std::cout << " >> CPenergy = " << CPenergy << " evento = " << nEvent << std::endl;
+    float sum2Denergy = 0.;
+    for(auto ijH:ij.second){
+      float layerCenergy = layerClusters[ijH].energy();
+      if(layerCenergy < 0) std::cout << " >> layerCenergy = " << layerCenergy << std::endl;
+      layerClenergy_vsCaloPenergy_ni->Fill(CPenergy, layerCenergy);    
+      sum2Denergy += layerCenergy;
+    }
+    if(sum2Denergy != 0.) {
+      layerClenergySum_vsCaloPenergy_ni->Fill(CPenergy, sum2Denergy);
+      for(auto ijH:ij.second){
+	float layerCenergy = layerClusters[ijH].energy();
+	layerClenergy_vslayerClenergySum_ni->Fill(sum2Denergy, layerCenergy);    
+      }
+    }
+  }
+
+  */
+
+  return;
+
+  //first clean tracksters
+  std::vector<reco::HGCalMultiCluster> mcHClean = cleanTimeMC(*mcH);
+  std::vector<reco::HGCalMultiCluster> mcMIPHClean = cleanTimeMC(*mcMIPH);
+
+
+  //now select highest cluster for each side
+  std::vector<reco::HGCalMultiCluster> allTracksters;
+  std::vector<reco::HGCalMultiCluster> bestTrackster = getHighestEnergyMC(mcHClean, mcMIPHClean, allTracksters);
+
+  if(debug) std::cout << " qui ci sono bestTrackster.size() = " << bestTrackster.size() 
+		      << " allTracksters size = " << allTracksters.size() 
+		      << std::endl;
+  if(debug) std::cout << " mcH->size() = " << mcH->size() << " mcMIPH->size() = " << mcMIPH->size() << std::endl;
+  if(debug) std::cout << " mcHClean.size() = " << mcHClean.size() << " mcMIPHClean.size() = " << mcMIPHClean.size() << std::endl;
 
 
 
@@ -412,7 +559,7 @@ void  CheckResolution::analyze(const Event& iEvent,
   }//caloParticles
 }
 
-std::vector<reco::HGCalMultiCluster> CheckResolution::cleanTimeMC(const std::vector<reco::HGCalMultiCluster>& allmc){
+std::vector<reco::HGCalMultiCluster> InvestigateEnergies::cleanTimeMC(const std::vector<reco::HGCalMultiCluster>& allmc){
 
   if(debug) std::cout << " >>> in cleanTimeMC "  << std::endl;
 
@@ -502,7 +649,7 @@ std::vector<reco::HGCalMultiCluster> CheckResolution::cleanTimeMC(const std::vec
 }
 
 
-std::vector<reco::HGCalMultiCluster> CheckResolution::getHighestEnergyMC(std::vector<reco::HGCalMultiCluster>& allmc, 
+std::vector<reco::HGCalMultiCluster> InvestigateEnergies::getHighestEnergyMC(std::vector<reco::HGCalMultiCluster>& allmc, 
 									 std::vector<reco::HGCalMultiCluster>& allmcMIP, 
 									 std::vector<reco::HGCalMultiCluster>& all){
 
@@ -562,7 +709,7 @@ std::vector<reco::HGCalMultiCluster> CheckResolution::getHighestEnergyMC(std::ve
 }
 
 
-std::set<uint32_t> CheckResolution::getMatchedClusteredHitsList(bool pos,
+std::set<uint32_t> InvestigateEnergies::getMatchedClusteredHitsList(bool pos,
 								  const std::set<std::pair<uint32_t,float> > &hits,
 								  const std::vector<reco::HGCalMultiCluster> &mcs, 
 								  std::set<uint32_t> &mcHits) {
@@ -596,7 +743,7 @@ std::set<uint32_t> CheckResolution::getMatchedClusteredHitsList(bool pos,
 
 
 
-std::set<uint32_t> CheckResolution::getMatchedHitsList(bool pos,
+std::set<uint32_t> InvestigateEnergies::getMatchedHitsList(bool pos,
 						      const std::set<std::pair<uint32_t,float> > &hits,
 						      const std::set<uint32_t> &mcs,
 						      std::set<uint32_t> &mcHits) {
@@ -617,7 +764,7 @@ std::set<uint32_t> CheckResolution::getMatchedHitsList(bool pos,
 
 
 //
-std::set<uint32_t> CheckResolution::getMatchedTrackedHitsList(bool pos,
+std::set<uint32_t> InvestigateEnergies::getMatchedTrackedHitsList(bool pos,
 							     const std::set<std::pair<uint32_t,float> >  &hits,
 							     const std::vector<reco::CaloCluster> &ccs, 
 							     std::set<uint32_t> &tkHits) {
@@ -649,9 +796,9 @@ std::set<uint32_t> CheckResolution::getMatchedTrackedHitsList(bool pos,
 
 
 
-std::set<uint32_t> CheckResolution::getMatched(const std::set<std::pair<uint32_t,float> > &a,
-					      const std::set<uint32_t> &b){
-
+std::set<uint32_t> InvestigateEnergies::getMatched(const std::set<std::pair<uint32_t,float> > &a,
+						   const std::set<uint32_t> &b){
+  
   std::set<uint32_t> matchedList;
   for(auto ii : a) {
     //find first match in second list
@@ -666,7 +813,7 @@ std::set<uint32_t> CheckResolution::getMatched(const std::set<std::pair<uint32_t
 }
 
 
-std::set<uint32_t> CheckResolution::getMatched(const std::set<uint32_t> &a,
+std::set<uint32_t> InvestigateEnergies::getMatched(const std::set<uint32_t> &a,
 					      const std::set<uint32_t> &b){
 
   std::set<uint32_t> matchedList;
@@ -684,7 +831,7 @@ std::set<uint32_t> CheckResolution::getMatched(const std::set<uint32_t> &a,
 
 
 //in 1st not in 2nd
-std::set<uint32_t> CheckResolution::getNOTMatched(const std::set<uint32_t> &a,
+std::set<uint32_t> InvestigateEnergies::getNOTMatched(const std::set<uint32_t> &a,
 						 const std::set<uint32_t> &b){
 
   std::set<uint32_t> matchedList;
@@ -703,7 +850,7 @@ std::set<uint32_t> CheckResolution::getNOTMatched(const std::set<uint32_t> &a,
   return matchedList;
 }
 
-std::vector<size_t> CheckResolution::decrease_sorted_indices(const std::vector<float>& v) {
+std::vector<size_t> InvestigateEnergies::decrease_sorted_indices(const std::vector<float>& v) {
   // initialize original index locations                                                       
   std::vector<size_t> idx(v.size());
   std::iota(idx.begin(), idx.end(), 0);
@@ -713,7 +860,7 @@ std::vector<size_t> CheckResolution::decrease_sorted_indices(const std::vector<f
   return idx;
 };
 
-std::pair<float, float> CheckResolution::fixSizeHighestDensity(std::vector<float>& time, std::vector<float> weight,
+std::pair<float, float> InvestigateEnergies::fixSizeHighestDensity(std::vector<float>& time, std::vector<float> weight,
                                                                unsigned int minNhits, float deltaT, float timeWidthBy) {
   if (time.size() < minNhits)
     return std::pair<float, float>(-99., -1.);
@@ -778,6 +925,357 @@ std::pair<float, float> CheckResolution::fixSizeHighestDensity(std::vector<float
 }
 
 
+void InvestigateEnergies::get2DclAssociated(std::map<uint32_t, std::vector<uint32_t> >& mappa, 
+					    std::map<uint32_t, std::vector<uint32_t> >& mappa_ni, 
+					    const std::vector<CaloParticle>& cP, 
+					    const std::vector<reco::CaloCluster>& lC){
 
-DEFINE_FWK_MODULE(CheckResolution);
+
+  std::vector<int> used;
+  used.resize(lC.size());
+
+  if(debug) std::cout << " now double loop for match " << std::endl; 
+  for(auto itCP : cP){
+    float ptCP = itCP.pt();
+    float etaCP = itCP.eta();
+    if(std::abs(itCP.eta()) < 1.4 || itCP.pt() < 2.) continue;
+
+    float energyCP = itCP.energy();
+    if(debug) std::cout << " itCP.energy = " << itCP.energy() << std::endl;
+    if(itCP.energy() < 0) std::cout << " NEGGGG  itCP.energy = " << itCP.energy() << std::endl;
+    float phiCP = itCP.phi();
+    int nIntCP = int(itCP.simClusters().size());
+    std::vector<uint32_t> cpHits;
+    cpHits.clear();
+    for(CaloParticle::sc_iterator scIt=itCP.simCluster_begin(); scIt!=itCP.simCluster_end(); scIt++){
+      //all hits and energy fractions at sim level 
+      std::vector<std::pair<uint32_t,float> > hits = (*scIt)->hits_and_fractions();
+      if(debug) std::cout << " >>> hits.size() = " << hits.size() << std::endl;
+      for(auto ij : hits) {
+        auto finder2 = hitmap.find(ij.first);
+        if(finder2 != hitmap.end()){
+          if(debug) std::cout << " trovato nel gen " << std::endl;
+          //hitsInCaloP[counter].push_back(ij.first);
+	  cpHits.push_back(ij.first);
+        }
+      }
+    }//loop over CP clusters
+
+    float sum2Denergy = 0.;
+    std::vector<float> clEnergy;
+    clEnergy.clear();
+    unsigned int counter2D = 0;
+    for(const reco::CaloCluster &sCl : lC){
+      if(used[counter2D] == 1) continue;
+      float energy2D = sCl.energy();
+      if(energy2D == 0) continue;
+      if(debug) std::cout << " energy2D = " << energy2D << std::endl;
+      float eta2D = sCl.eta();
+      float phi2D = sCl.phi();
+      if(debug) std::cout << " 2D energy = " << energy2D << " eta = " << eta2D << " phi = " << phi2D<< std::endl;
+      if(eta2D * etaCP < 0.) continue;
+
+      const HGCalDetId hitid = sCl.hitsAndFractions()[0].first;
+      float z2D = recHitTools.getPosition(hitid).z();
+      int layer2D = recHitTools.getLayerWithOffset(hitid);
+      //if(layer2D == 1) continue;
+      float dEta = (eta2D - etaCP);
+      float dPhi = reco::deltaPhi(phi2D, phiCP);
+      dEta_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, dEta);
+      dPhi_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, dPhi);
+      float deltaR = sqrt(dEta*dEta + dPhi*dPhi);
+      if(debug) std::cout << " cp energy = " << energyCP << " eta = " << etaCP << " phi = " << phiCP << " deltaR = " << deltaR << std::endl;
+      layer2D = z2D > 0 ? layer2D : -1.*layer2D;
+      dR_vs_layer->Fill(layer2D, deltaR);
+      //std::cout << " layer2D = " << layer2D << std::endl;
+
+      float energy2D_local = 0.;
+      for(auto ij2D : sCl.hitsAndFractions()){
+	for(auto ijHitsCP : cpHits){
+	  if(ij2D.first == ijHitsCP){
+	    if(debug) std::cout << " hit in 2Dcl matchata a CP " << std::endl;
+	    const HGCRecHit *hit = hitmap[ij2D.first];
+	    energy2D_local += hit->energy();
+	    break;
+	  }
+	}
+      }
+      if(energy2D_local > energy2D * 0.8){
+	if(debug) std::cout << " inserito" << std::endl;
+	used[counter2D] = 1;
+	layerClenergy_vsCaloPpt->Fill(ptCP, energy2D);
+	layerClenergy_vsCaloPenergy->Fill(energyCP, energy2D);
+	sum2Denergy += energy2D;
+        clEnergy.push_back(energy2D);
+
+	if(nIntCP == 1){
+          //mappa_ni[ijCP.first].push_back(ijCl.first);
+          layerClenergy_vsCaloPenergy_ni->Fill(energyCP, energy2D);
+        }
+      }
+      ++counter2D;
+    } //2Dcl loop
+    
+    if(sum2Denergy != 0.){
+      layerClenergySum_vsCaloPenergy->Fill(energyCP, sum2Denergy);
+      if(nIntCP == 1) layerClenergySum_vsCaloPenergy_ni->Fill(energyCP, sum2Denergy);
+      
+      for(auto iE : clEnergy){
+	layerClenergy_vslayerClenergySum->Fill(sum2Denergy, iE);
+        if(nIntCP == 1) layerClenergy_vslayerClenergySum_ni->Fill(sum2Denergy, iE);
+      }
+    }
+  }// loop CP
+
+
+
+  /*
+  for(auto ijCP : hitsInCaloP){
+    float energyCP = cP[ijCP.first].energy();
+    float etaCP = cP[ijCP.first].eta();
+    float phiCP = cP[ijCP.first].phi();
+    int nIntCP = int(cP[ijCP.first].simClusters().size());
+
+    float sum2Denergy = 0.;  
+    std::vector<float> clEnergy;
+    clEnergy.clear();
+
+    for(auto ijCl : hitsIn2Dcl){
+      float energy2D = lC[ijCl.first].energy();
+      float eta2D = lC[ijCl.first].eta();
+      float phi2D = lC[ijCl.first].phi();
+      const HGCalDetId hitid = lC[ijCl.first].hitsAndFractions()[0].first;
+      float z2D = recHitTools.getPosition(hitid).z();
+      int layer2D = recHitTools.getLayerWithOffset(hitid);
+
+      if(debug) std::cout << " 2D energy = " << energy2D << " eta = " << eta2D << " phi = " << phi2D<< std::endl;
+      if(eta2D * etaCP < 0.) continue;
+
+      float dEta = (eta2D - etaCP);
+      float dPhi = reco::deltaPhi(phi2D, phiCP);
+      dEta_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, dEta);
+      dPhi_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, dPhi);
+      float deltaR = sqrt(dEta*dEta + dPhi*dPhi);
+      if(debug) std::cout << " cp energy = " << energyCP << " eta = " << etaCP << " phi = " << phiCP << " deltaR = " << deltaR << std::endl; 
+      dR_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, deltaR);
+
+      float energy2D_local_v2 = 0.;
+      for(auto ijHits2D : ijCl.second){
+      	for(auto ijHitsCP : ijCP.second){
+	  if(ijHits2D.first == ijHitsCP){
+	    energy2D_local_v2 += ijHits2D.second;
+	    if(debug) std::cout << " matchato caloP 2Dcl => ratio local/all = " << energy2D_local_v2 / energy2D << std::endl;
+	    break;
+	  }
+	}
+      }
+      if(energy2D_local_v2 > energy2D * 0.8){
+	mappa[ijCP.first].push_back(ijCl.first);
+	layerClenergy_vsCaloPenergy->Fill(energyCP, energy2D);
+	sum2Denergy += energy2D;
+	clEnergy.push_back(energy2D);
+
+	if(nIntCP == 1){
+	  mappa_ni[ijCP.first].push_back(ijCl.first);
+	  layerClenergy_vsCaloPenergy_ni->Fill(energyCP, energy2D);
+	}
+	if(debug) std::cout << " inserito" << std::endl;
+      }
+      //      else if(energy2D_local_v2 != 0) std::cout << " typic E ratio = " << energy2D_local_v2/energy2D << std::endl;
+    }//hits in 2Dcl
+    if(sum2Denergy != 0.){
+      layerClenergySum_vsCaloPenergy->Fill(energyCP, sum2Denergy);
+      if(nIntCP == 1) layerClenergySum_vsCaloPenergy_ni->Fill(energyCP, sum2Denergy);
+
+      for(auto iE : clEnergy){
+	layerClenergy_vslayerClenergySum->Fill(sum2Denergy, iE);
+	if(nIntCP == 1) layerClenergy_vslayerClenergySum_ni->Fill(sum2Denergy, iE);
+      }
+    }
+  }//hits in CP
+
+
+
+  //caloparticle level map
+  std::map<uint32_t, std::vector<uint32_t>> hitsInCaloP;
+  unsigned int counter = 0;
+  for(auto itCP : cP){
+    //    std::cout << " CP energy = " << itCP.energy() << " pt = " << itCP.pt() << std::endl;
+    if(std::abs(itCP.eta()) < 1.4 || itCP.pt() < 2.) continue;
+    if(debug) std::cout << " itCP.energy = " << itCP.energy() << std::endl;
+    if(itCP.energy() < 0) std::cout << " NEGGGG  itCP.energy = " << itCP.energy() << std::endl;
+    for(CaloParticle::sc_iterator scIt=itCP.simCluster_begin(); scIt!=itCP.simCluster_end(); scIt++){
+      
+      //all hits and energy fractions at sim level
+      std::vector<std::pair<uint32_t,float> > hits = (*scIt)->hits_and_fractions();
+      if(debug) std::cout << " >>> hits.size() = " << hits.size() << std::endl;
+      for(auto ij : hits) {
+	
+	auto finder2 = hitmap.find(ij.first);
+	if(finder2 != hitmap.end()){
+	  
+	  if(debug) std::cout << " trovato nel gen " << std::endl;
+	  hitsInCaloP[counter].push_back(ij.first);
+	}
+      }
+    }
+    ++counter;
+  }
+
+  //layer cluster level
+  std::map<uint32_t, std::vector<std::pair<uint32_t, float>>> hitsIn2Dcl;
+  unsigned int counter2D = 0;
+  for(const reco::CaloCluster &sCl : lC){
+    float energy2D = sCl.energy();  
+    if(debug) std::cout << " energy2D = " << energy2D << std::endl;
+    float energy2D_local = 0.;
+    for(auto ij2D : sCl.hitsAndFractions()){
+      auto finder2D = hitmap.find(ij2D.first);
+      if(finder2D != hitmap.end()){
+	const HGCRecHit *hit = hitmap[ij2D.first];
+	energy2D_local += hit->energy();
+	if(debug) std::cout << " trovata reco hit energy = " << hit->energy() << std::endl;
+	if(hit->energy() < 0) std::cout << " NEGGGG  hit->energy() = " << hit->energy() << std::endl;
+	if(debug) std::cout << " trovato nel 2D energy = " << hit->energy() << " energy2D_local = " << energy2D_local << " ratio to 2D = " << energy2D_local/energy2D << std::endl;
+	hitsIn2Dcl[counter2D].push_back(std::pair<uint32_t, float>(ij2D.first, hit->energy()));
+	if(debug) std::cout << " counter2D = " << counter2D << " hitsIn2Dcl.size() = " << hitsIn2Dcl.size() << " hitsIn2Dcl[counter2D].size = " << hitsIn2Dcl[counter2D].size() << std::endl;
+	//delete hit;
+	if(debug) std::cout << " fine giro 1 " << std::endl;
+      }
+      if(debug) std::cout << " fine giro 2 " << std::endl;
+    }
+    if(debug) std::cout << " fine giro 3 " << std::endl;
+    ++counter2D;
+  }
+  
+  return;
+  if(debug) std::cout << " now double loop for match " << std::endl; 
+  for(auto ijCP : hitsInCaloP){
+    float energyCP = cP[ijCP.first].energy();
+    float etaCP = cP[ijCP.first].eta();
+    float phiCP = cP[ijCP.first].phi();
+    int nIntCP = int(cP[ijCP.first].simClusters().size());
+
+    float sum2Denergy = 0.;  
+    std::vector<float> clEnergy;
+    clEnergy.clear();
+
+    for(auto ijCl : hitsIn2Dcl){
+      float energy2D = lC[ijCl.first].energy();
+      float eta2D = lC[ijCl.first].eta();
+      float phi2D = lC[ijCl.first].phi();
+      const HGCalDetId hitid = lC[ijCl.first].hitsAndFractions()[0].first;
+      float z2D = recHitTools.getPosition(hitid).z();
+      int layer2D = recHitTools.getLayerWithOffset(hitid);
+
+      if(debug) std::cout << " 2D energy = " << energy2D << " eta = " << eta2D << " phi = " << phi2D<< std::endl;
+      if(eta2D * etaCP < 0.) continue;
+
+      float dEta = (eta2D - etaCP);
+      float dPhi = reco::deltaPhi(phi2D, phiCP);
+      dEta_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, dEta);
+      dPhi_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, dPhi);
+      float deltaR = sqrt(dEta*dEta + dPhi*dPhi);
+      if(debug) std::cout << " cp energy = " << energyCP << " eta = " << etaCP << " phi = " << phiCP << " deltaR = " << deltaR << std::endl; 
+      dR_vs_layer->Fill(z2D > 0 ? layer2D : -1.*layer2D, deltaR);
+
+      float energy2D_local_v2 = 0.;
+      for(auto ijHits2D : ijCl.second){
+      	for(auto ijHitsCP : ijCP.second){
+	  if(ijHits2D.first == ijHitsCP){
+	    energy2D_local_v2 += ijHits2D.second;
+	    if(debug) std::cout << " matchato caloP 2Dcl => ratio local/all = " << energy2D_local_v2 / energy2D << std::endl;
+	    break;
+	  }
+	}
+      }
+      if(energy2D_local_v2 > energy2D * 0.8){
+	mappa[ijCP.first].push_back(ijCl.first);
+	layerClenergy_vsCaloPenergy->Fill(energyCP, energy2D);
+	sum2Denergy += energy2D;
+	clEnergy.push_back(energy2D);
+
+	if(nIntCP == 1){
+	  mappa_ni[ijCP.first].push_back(ijCl.first);
+	  layerClenergy_vsCaloPenergy_ni->Fill(energyCP, energy2D);
+	}
+	if(debug) std::cout << " inserito" << std::endl;
+      }
+      //      else if(energy2D_local_v2 != 0) std::cout << " typic E ratio = " << energy2D_local_v2/energy2D << std::endl;
+    }//hits in 2Dcl
+    if(sum2Denergy != 0.){
+      layerClenergySum_vsCaloPenergy->Fill(energyCP, sum2Denergy);
+      if(nIntCP == 1) layerClenergySum_vsCaloPenergy_ni->Fill(energyCP, sum2Denergy);
+
+      for(auto iE : clEnergy){
+	layerClenergy_vslayerClenergySum->Fill(sum2Denergy, iE);
+	if(nIntCP == 1) layerClenergy_vslayerClenergySum_ni->Fill(sum2Denergy, iE);
+      }
+    }
+  }//hits in CP
+  */
+
+  if(debug) std::cout << " mappa.size() = " << mappa.size() << std::endl;
+  return;
+}
+
+
+
+
+
+void
+InvestigateEnergies::beginJob()
+{
+}
+
+// ------------ method called once each job just after ending the event loop  ------------
+void
+InvestigateEnergies::endJob()
+{
+  int firstBin = 0;
+  //  std::cout << " layerClenergy_vsCaloPenergy->GetNbinsX() = " << layerClenergy_vsCaloPenergy->GetNbinsX() << std::endl;                                            
+  for(int iB = 1; iB < layerClenergy_vsCaloPenergy->GetNbinsX()+1; ++iB){
+    //    if(firstBin != 0 && iB > firstBin  + 5) break;
+    float xVal = (iB-1) * 0.004 + 0.002;
+    //    std::cout << " 2D binX = " << xVal << std::endl;                                                                                                             
+    auto dummy = (TH1D*)layerClenergy_vsCaloPenergy->ProjectionY("dummy", iB, iB+1);
+    int allEvt = dummy->GetEntries();
+    float localEvt = 0.;
+    auto dummySumCP = (TH1D*)layerClenergySum_vsCaloPenergy->ProjectionY("dummySumCP", iB, iB+1);
+    int allEvtSumCP = dummySumCP->GetEntries();
+    float localEvtSumCP = 0.;
+    auto dummySum = (TH1D*)layerClenergy_vslayerClenergySum->ProjectionY("dummySum", iB, iB+1);
+    int allEvtSum = dummySum->GetEntries();
+    float localEvtSum = 0.;
+
+    if(allEvt == 0 || allEvtSumCP == 0 || allEvtSum == 0) continue;
+
+    if( firstBin==0) firstBin = iB;
+    for(int ij = 1; ij<dummy->GetNbinsX()+1; ++ij){
+      float yVal = (ij-1) * 0.02 + 0.01;
+      //      std::cout << " 2D binY = " << yVal << " dummy->GetNbinsX() = " << dummy->GetNbinsX() << " ij = " << ij << " " << (ij-1 * 0.02) + 0.01 << std::endl;      
+      int xBin = fr_layerClenergy_vsCaloPenergy->GetXaxis()->FindBin(xVal);
+      int yBin = fr_layerClenergy_vsCaloPenergy->GetYaxis()->FindBin(yVal/xVal);
+
+      localEvt += dummy->GetBinContent(ij);
+      fr_layerClenergy_vsCaloPenergy->SetBinContent(xBin, yBin, (allEvt - localEvt) / allEvt);
+      //      std::cout << " x = " << xVal << " y = " << yVal/xVal << " val = " << (allEvt - localEvt) / allEvt << std::endl;
+	    
+      localEvtSumCP += dummySumCP->GetBinContent(ij);
+      fr_layerClenergySum_vsCaloPenergy->SetBinContent(xBin, yBin, (allEvtSumCP - localEvtSumCP) / allEvtSumCP);
+
+      localEvtSum += dummySum->GetBinContent(ij);
+      fr_layerClenergy_vslayerClenergySum->SetBinContent(xBin, yBin, (allEvtSum - localEvtSum) / allEvtSum);
+    }
+    delete dummy;
+    delete dummySum;
+    delete dummySumCP;
+  }
+
+}
+
+
+
+
+DEFINE_FWK_MODULE(InvestigateEnergies);
 

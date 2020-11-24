@@ -32,7 +32,7 @@ process.source = cms.Source("PoolSource",
 
 
 
-process.ticlAnalyzer = cms.EDAnalyzer("CheckResolution")
+process.ticlAnalyzer = cms.EDAnalyzer("InvestigateEnergies")
 
 
 process.TFileService = cms.Service("TFileService",
