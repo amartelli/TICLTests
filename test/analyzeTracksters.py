@@ -5,11 +5,13 @@ process = cms.Process("ANA")
 process.load('Configuration.StandardSequences.Services_cff')
 process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('Configuration.EventContent.EventContent_cff')
-process.load('Configuration.Geometry.GeometryExtended2023D28Reco_cff')
+process.load('Configuration.Geometry.GeometryExtended2026D49Reco_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 process.load('Configuration.StandardSequences.EndOfProcess_cff')
 
+from Configuration.AlCa.GlobalTag import GlobalTag
+process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase2_realistic_T15', '')
 
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(-1)
@@ -19,11 +21,9 @@ process.maxEvents = cms.untracked.PSet(
 
 process.source = cms.Source("PoolSource",
                             fileNames = cms.untracked.vstring(
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_Pt10_vtxHLLHC_LowEta.root',
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_Pt10_vtxHLLHC_HighEta.root'
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_211_Pt10.root'
-        #'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211_130_Pt10.root'
-        'file:/eos/cms/store/group/dpg_hgcal/comm_hgcal/amartell/TICLtests/stepTICL_211Pt10_HighEta_PU200_4.root'
+#'file:/tmp/amartell/TICL_test_ttB_dR_photon.root'
+'file:/tmp/amartell/TICL_test_ttB_dR_pre6.root'
+
         ),
                             secondaryFileNames = cms.untracked.vstring(),
                              noEventSort = cms.untracked.bool(True),
@@ -31,7 +31,15 @@ process.source = cms.Source("PoolSource",
                             )
 
 
-process.ticlAnalyzer = cms.EDAnalyzer("TICLAnalyzer")
+
+process.ticlAnalyzer = cms.EDAnalyzer("AnalyzeTracksters")
+
+
+process.TFileService = cms.Service("TFileService",
+                                   #fileName = cms.string("file:ticl_photon.root")
+                                   fileName = cms.string("file:ticl_ttbar.root")
+                                   )
+
 
 process.p = cms.Path(process.ticlAnalyzer)
 
