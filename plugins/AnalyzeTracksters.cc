@@ -123,6 +123,8 @@ private:
   std::pair<float, float> fixSizeHighestDensity(std::vector<float>& time, std::vector<float> weight,
                                                 unsigned int minNhits = 3, float deltaT=0.210, float timeWidthBy=0.5);
 
+  edm::EDGetTokenT<HGCRecHitCollection> recHitsEE_;
+  edm::EDGetTokenT<HGCRecHitCollection> recHitsFH_;
 
   const edm::EDGetTokenT<std::vector<CaloParticle> > genToken_;
   const edm::EDGetTokenT<XYZPointF> genVtxPositionToken_;
@@ -196,7 +198,12 @@ private:
   TH2F* h2_energy_vs_dR;
   TH2F* h2_time_vs_energy;
   TProfile* tp_time_vs_energy;
+  TH2F* h2_time_vs_dR;
+  TProfile* tp_time_vs_dR;
   TH1F* hTime_2Dcl;
+
+  TH2F* h2_timeH_vs_dR;
+  TProfile* tp_timeH_vs_dR;
 
   bool debug;
 
@@ -208,6 +215,8 @@ private:
 
 
 AnalyzeTracksters::AnalyzeTracksters(const edm::ParameterSet& iConfig) :
+  recHitsEE_(consumes<HGCRecHitCollection>(edm::InputTag("HGCalRecHit:HGCEERecHits"))),
+  recHitsFH_(consumes<HGCRecHitCollection>(edm::InputTag("HGCalRecHit:HGCHEFRecHits"))),
   genToken_(consumes<std::vector<CaloParticle> >(edm::InputTag("mix:MergedCaloTruth"))),
   genVtxPositionToken_(consumes<XYZPointF>(edm::InputTag("genParticles:xyz0"))),
   genVtxTimeToken_(consumes<float>(edm::InputTag("genParticles:t0"))),
@@ -280,6 +289,11 @@ AnalyzeTracksters::AnalyzeTracksters(const edm::ParameterSet& iConfig) :
   h2_time_vs_energy = fs->make<TH2F>("h2_time_vs_energy", "", 2000, 0., 20., 200, -0.1, 0.1);
   tp_time_vs_energy = fs->make<TProfile>("tp_time_vs_energy", "", 2000, 0., 20.);
 
+  h2_time_vs_dR = fs->make<TH2F>("h2_time_vs_dR", "", 200, 0., 20., 200, -0.1, 0.1);
+  tp_time_vs_dR = fs->make<TProfile>("tp_time_vs_dR", "", 200, 0., 20.);
+  h2_timeH_vs_dR = fs->make<TH2F>("h2_timeH_vs_dR", "", 200, 0., 20., 400, -0.2, 0.2);
+  tp_timeH_vs_dR = fs->make<TProfile>("tp_timeH_vs_dR", "", 200, 0., 20.);
+
   hTime_2Dcl = fs->make<TH1F>("hTime_2Dcl", "", 60000, -5., 25.);
 
   debug = false;
@@ -306,6 +320,22 @@ void  AnalyzeTracksters::analyze(const Event& iEvent,
 			       const EventSetup& iSetup) {
 
   ++nEvent;
+
+
+  //make a map detid-rechit
+  Handle<HGCRecHitCollection> recHitHandleEE;
+  Handle<HGCRecHitCollection> recHitHandleFH;
+  std::map<DetId,const HGCRecHit*> hitmap;
+  iEvent.getByToken(recHitsEE_,recHitHandleEE);
+  iEvent.getByToken(recHitsFH_,recHitHandleFH);
+  for(auto ij : *recHitHandleEE){
+      hitmap[ij.detid().rawId()] = &(ij);
+    }
+  for(auto ij : *recHitHandleFH){
+      hitmap[ij.detid().rawId()] = &(ij);
+    }
+
+
   edm::ESHandle<CaloGeometry> geom;
   iSetup.get<CaloGeometryRecord>().get(geom);
   recHitTools.setGeometry(*geom);
@@ -548,9 +578,9 @@ void  AnalyzeTracksters::analyze(const Event& iEvent,
 	float lcE = layerClustersTimes.get(iT.vertices(i)).second;
 	if(lcE == -1 || lcT == -99.) continue;
 
-	std::array<double,3> to_lc{ {0., 0., seedLCPoint.z()} };
-	layerIntersection(to_lc, GlobalPoint(xGen, yGen, zGen), genVtx);
-	float dR_lc = sqrt(pow(seedLCPoint.x() - to_lc[0], 2) + pow(seedLCPoint.y() - to_lc[1], 2));
+	std::array<double,3> to_lc{ {0., 0., cluster.z()} };
+	layerIntersection(to_lc, GlobalPoint(seedLCPoint.x(), seedLCPoint.y(), seedLCPoint.z()), genVtx);
+	float dR_lc = sqrt(pow(cluster.x() - to_lc[0], 2) + pow(cluster.y() - to_lc[1], 2));
 
 
 	float tdiff = lcT - tSeed;
@@ -568,8 +598,32 @@ void  AnalyzeTracksters::analyze(const Event& iEvent,
 	  tp_diff_seed_lc_vsERcut->Fill(cluster.energy(), tdiff);
 	  h2_time_vs_energy->Fill(cluster.energy(), tdiff);
 	  tp_time_vs_energy->Fill(cluster.energy(), tdiff);
-
 	}
+	h2_time_vs_dR->Fill(dR_lc, tdiff);
+	tp_time_vs_dR->Fill(dR_lc, tdiff);
+
+	//recHits
+	for (auto const& hit : cluster.hitsAndFractions()) {
+	  auto finder = hitmap.find(hit.first);
+	  if (finder == hitmap.end())
+	    continue;
+	  
+	  //time is computed wrt  0-25ns + offset and set to -1 if no time
+	  const HGCRecHit* rechit = finder->second;
+	  float rhTimeE = rechit->timeError();
+	  if (rhTimeE < 0.)
+	    continue;
+	  float timeRh = rechit->time() - 5.;
+	  auto positionH = recHitTools.getPosition(hit.first);
+	  std::array<double,3> to_rh{ {0., 0., positionH.z() } };
+	  layerIntersection(to_rh, GlobalPoint(seedLCPoint.x(), seedLCPoint.y(), seedLCPoint.z()), genVtx);
+	  float dR_rh = sqrt(pow(positionH.x() - to_lc[0], 2) + pow(positionH.y() - to_lc[1], 2));
+
+	  float tRhdiff = timeRh - tSeed;
+	  h2_timeH_vs_dR->Fill(dR_rh, tRhdiff);
+	  tp_timeH_vs_dR->Fill(dR_rh, tRhdiff);
+	}
+
 	h2_energy_vs_dR->Fill(dR_lc, cluster.energy());
 	hTime_2Dcl->Fill(layerClustersTimes.get(iT.vertices(i)).first);
       }
