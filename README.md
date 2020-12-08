@@ -1,26 +1,21 @@
 #
-#plotting tools for ticl studies
+#looking into tracksters ( timing for example)
 #
 
 Install
 
 ```
-git clone https://gitlab.cern.ch/psilva/patatrack5.git RecoHGCal/TICLTests
+cmsrel CMSSW_11_2_0_pre9
+cd CMSSW_11_2_0_pre9/src
+cmsenv
+git clone git@github.com:amartelli/TICLTests.git RecoHGCal/TICLTests
+cd RecoHGCal/TICLTests
+git checkout D49_11_2_0_pre8_on
 scram b
 ```
 
 Run 
 
 ```
-cmsRun test/analyzeTICL_cfg.py input=file:/afs/cern.ch/user/a/amartell/public/TICL/Single211_vtxHLLHC_eta1p75.root
+cmsRun test/analyzeTracksters.py
 ```
-
-Generate samples (2 particles in cone in front of HGCAL)
-
-```
-cd benchmarks
-cmsRun particleGun_GEN_SIM.py pdgId=22 deltaR=0.2 maxEvents=10
-cmsRun step2_DIGI_L1_L1TrackTrigger_DIGI2RAW_HLT.py
-cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT_VALIDATION_DQM.py
-```
-
